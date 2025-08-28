@@ -1,0 +1,32 @@
+<input type="file" name="image" id="fileInput">
+<button onclick="uploadFile()">Upload</button>
+
+<script>
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert('请选择一个文件！');
+        return;
+    }
+
+    const formData = new FormData();
+    // 这里的 'image' 必须和 Express 路由中的 'image' 保持一致
+    formData.append('image', file);
+
+    try {
+        const response = await fetch('http://localhost:3000/media/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        console.log('Success:', result);
+        alert('上传成功！');
+    } catch (error) {
+        console.error('Error:', error);
+        alert('上传失败！');
+    }
+}
+</script>
