@@ -14,7 +14,8 @@
 Token 让浏览器操作，更加安全，逻辑可以稍微偷懒一些，但是JavaScript也无法操作和查询Token
 
 ## 目录结构
-
+```
+Screenshot                 // 此 MD 文档的截图
 .
 ├── API                    // Express 后端路由
 │   ├── auth               // jwt 加解密中间件
@@ -39,6 +40,7 @@ Token 让浏览器操作，更加安全，逻辑可以稍微偷懒一些，但�
 
 hxbox.sql                  // 这个是数据库文件，管理员账号密码 admina和admin，带了测试数据
 upload-test.html           // 测试后端图片上传功能
+```
 
 目录结构 如果一点都不懂可以看我之前写的现代网页开发入门
 
