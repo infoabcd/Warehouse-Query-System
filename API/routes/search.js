@@ -4,10 +4,12 @@ const router = express.Router();
 const db = require('../models');
 const { Commodity, Category } = db;
 
+const { Op } = require('sequelize'); // 模糊匹配用(Operators)，记得sequelize和Sequelize有本质区别的
+
 // 已经全局使用中间件来判断是否登入，role为true则是管理员
 // 我们据此决定检索数据库后返回的数据字段是怎么样的，如果是管理员，就返回商品更加详细的数据，如进货价
 
-// GET 搜索功能路由
+// GET 搜索功能路由(ID)
 router.get('/:key', async(req, res) => {
     try {
         const key = req.params.key;
@@ -58,10 +60,77 @@ router.get('/:key', async(req, res) => {
     }
 });
 
+// GET 搜索功能路由(Title) - v1.0.2增加
+// router.get('/title', async(req, res) => {
+router.get('/title/t', async(req, res) => {
+    // /title/:title 这种方式在搜索功能中是很怪的代码实践，所以我们使用query，也就是 ==>> /title?title=xxx
+    // 路由的顺序其实很重要，上面的路由 /:key，而此处是/title，/title?title=xxx会命中到 /:key 的路由
+    // 但是由于这是个学习项目，我们保留这种顺序错误，并提供一个解决方法，也就是/title后面增加一个/t
+    // 此时，路由就变成了 http://localhost:3000/search/title/t?title=xxx   成功匹配上
+    try {
+        const title = req.query.title;
+
+        // 我们采用模糊匹配可以最大程度匹配到商品
+        // 所以即便在整体数据不多的情况下，也可能命中很多数据
+        // 所以我们依旧需要制作一个分页功能
+        // 分页功能 query ====>>> ?title=xx&page=xx&limit=xx
+        const page = req.query.page && !isNaN(req.query.page) && parseInt(req.query.page) > 0 ? parseInt(req.query.page) : 1;
+        const limit = req.query.limit && !isNaN(req.query.limit) && parseInt(req.query.limit) > 0 ? parseInt(req.query.limit) : 15;
+        const offset = ( page - 1 ) * limit;
+
+        const Commodities = await Commodity.findAndCountAll({
+            attributes: [           // 不管你是否是管理员了，搜索直接返回有限数据吧。(v1.0.2)
+                'id',
+                'title',
+                'description',
+                'price',
+                'promotion_price',
+                'is_on_promotion',
+                'discount_amount',
+                'stock',
+                'image_url'
+            ],
+            distinct: true,
+            limit: limit,
+            offset: offset,
+
+            include: [{
+                model: Category,
+                as: 'categories',
+            }],
+
+            // 模糊匹配 title字段内包含title变量的数据
+            // 如果 % 只有一个，并在后面，就是匹配以title变量开头的数据。(通配符)
+            where: {
+                title: {
+                    [Op.like]: `%${title}%`
+                }
+            }
+        })
+
+        if (title == null || Commodities.count == 0) {
+            // 记得使用 return 来返回 res.status
+            // res.status(200).json({ message: '未找到对应的商品.' });
+            // 判断成立，上面代码执行完，因为没有 return 依旧会继续执行下去，直到下面的 return
+            // 之后报错 - Cannot set headers after they are sent to the client
+            return res.status(200).json({ message: '未找到对应的商品.' });
+        }
+
+        return res.status(200).json(Commodities);
+
+    } catch (error) {
+        console.error('搜索商品标题时出现问题：', error);
+        res.status(500).json({ message: '服务器内部错误.' });
+    }
+})
+
 // GET 分类功能
 router.get('/assort/:key', async(req, res) => {
     try {
-        const role = req.user?.role;
+        // 这个是开头实用全局中间件鉴权的时候使用的，但是发现除了商品详细页，其他根本不需要输出那么详细
+        // 而输出依靠着role来决定。如今，全局中间件已经在app.js取消，但是下面这个代码依旧保留下来了
+        // 下面role与其判断对代码运行没有实质性的影响，也不想随意地改动了
+        const role = req.user?.role;    // 在 v1.0.1 弃用
 
         // 分类功能 params
         const key = req.params.key;
