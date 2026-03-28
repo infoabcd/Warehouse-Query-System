@@ -1,4 +1,9 @@
-# Warehouse-Query-System - v1.0.2
+# Warehouse-Query-System - v2.0
+(下面README或许不再适用，使用Ai辅助更新了版面，使用Shadcn替代了AntD)
+(账号密码保持 admina:admin 不变)
+
+---
+
 这个仓储系统可以方便查询某样商品的情况，并且有详细开发笔记，方便从项目中学。
 
 开发的每一步都有笔记和解释，如果你希望学习 Express+React+CSS组件库(AntDesign) 不妨看看这个项目，并试试二次开发。

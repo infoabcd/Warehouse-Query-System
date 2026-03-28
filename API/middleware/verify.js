@@ -1,4 +1,5 @@
 const { verifyToken } = require('../auth/jwt');
+const log = require('../lib/logger').createLogger('auth');
 
 const verifyAdmin = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -7,7 +8,7 @@ const verifyAdmin = (req, res, next) => {
         : req.cookies?.authToken;
 
     if (!token) {
-        console.warn('verifyAdmin: 未找到认证令牌。');          // 如果没有 Token，直接返回 404，不暴露是权限问题
+        log.debug('verifyAdmin: 未找到认证令牌');
         return res.status(404).send('Page Not Found');       // 或 res.status(404).json({ message: 'Page Not Found' });
     }
 
@@ -16,7 +17,7 @@ const verifyAdmin = (req, res, next) => {
         // 检查 token 中是否存在 role 字段，并且 role 必须为 true (1)
         // 这里的 decoded 由 登陆路由 传递Payload到generateToken 生成的，我指定了一个role的Payload。
         if (!decoded || !decoded.role) {                                                    // 这里的 role 对应 User 模型中的 role: DataTypes.BOOLEAN
-            console.warn('verifyAdmin: 令牌无效或用户无管理员权限 (role: false)。', decoded);
+            log.debug('verifyAdmin: 令牌无效或非管理员', { role: decoded?.role });
             return res.status(404).send('Page Not Found');
         }
 
@@ -25,7 +26,7 @@ const verifyAdmin = (req, res, next) => {
         next();
     } catch (error) {
         // Token 验证失败 (如过期、篡改)
-        console.error('verifyAdmin: Token 验证失败:', error.message);
+        log.warn('verifyAdmin: Token 验证失败', error.message);
         return res.status(404).send('Page Not Found');
     }
 };
@@ -41,21 +42,21 @@ const checkLogin = (req, res, next) => {
     // 会导致一些类似，"Headers already sent" 的错误，如果没有 Token，可能会执行到下面的错误捕捉：认证错误。
     // 而 return 使得代码，在此处(中间件)返回后，就不再执行下面内容。确保了函数在发送响应或传递控制权后立即停止。
     if (!token) {
-        console.warn('未登陆');
+        log.debug('checkLogin: 未携带令牌');
         return next();
     }
 
     try {
         const decoded = verifyToken(token)
         if (!decoded || !decoded.role) {
-            console.warn('不合法的token');
+            log.debug('checkLogin: 令牌无效或非管理员');
             return next();
         }
 
         req.user = decoded;
         next();
     } catch (error) {
-        console.log('认证错误:', error.message);
+        log.debug('checkLogin: 解析令牌失败', error.message);
         next();
     }
 };

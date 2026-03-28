@@ -1,202 +1,262 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Card, Flex, Divider, List, Tag } from 'antd';
-import { Typography, Spin, Alert, Image, Button } from 'antd';
-import { ArrowLeftOutlined, PoundCircleOutlined, DollarCircleOutlined } from '@ant-design/icons';
-
-const { Title, Paragraph, Text } = Typography;
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Package } from "lucide-react";
+import Navbar from "@/components/Navbar";
+import { PageBackButton } from "@/components/PageBackButton";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { mediaImageUrl, API_BASE } from "@/lib/api";
 
 function Product() {
   const navigate = useNavigate();
-  // useParams 钩子用于从 URL 中获取动态参数。
-  // 在这里，它获取 URL 路径中的 'key' 参数，例如 /products/123 中的 '123'。
   const { key } = useParams();
-
-  // 1. 使用 useState 钩子来管理组件的状态。
-  // productData 存储从 API 获取的商品数据。
-  // loading 跟踪数据是否正在加载中，用于显示加载提示。
-  // error 存储请求失败时的错误信息。
   const [productData, setProductData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [descExpanded, setDescExpanded] = useState(false);
 
-  // 2. useEffect 钩子用于处理“副作用”，比如数据获取。
-  // useEffect 确保 fetchData 函数只在组件挂载时或 key 变化时执行。
-  // 依赖项数组 [key] 是关键：当 key 的值改变时，useEffect 会重新执行。
-  // 这可以防止无限循环。
   useEffect(() => {
-    // 异步函数 fetchData 用于发起网络请求。
-    const fetchData = async () => {
+    if (!key) return;
+    let cancelled = false;
+    (async () => {
       try {
-        // 请求开始，设置 loading 为 true
         setLoading(true);
-
-        // 使用 await 等待 API 响应
-        const response = await fetch(`http://localhost:3000/products/${key}`,
-          {
-            credentials: 'include'
-            // 上面的参数是告诉浏览器，这个fetch带上token
-            // 否则后端是无法收到token的，会被视为未登陆
-          }
-        );
-        
-        // 检查响应状态码。如果不是 2xx，则抛出错误。
-        if (!response.ok) {
-          throw new Error('网络请求失败');
-        }
-        
-        // 解析响应数据为 JSON 格式
+        const response = await fetch(`${API_BASE}/products/${key}`, {
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("网络请求失败");
         const data = await response.json();
-        
-        // 请求成功，更新商品数据和错误状态
-        setProductData(data);
-        setError(null);
+        if (!cancelled) {
+          setProductData(data);
+          setError(null);
+        }
       } catch (err) {
-        // 捕获请求过程中发生的任何错误，并更新错误状态
-        setError(err.message);
+        if (!cancelled) setError(err.message);
       } finally {
-        // finally 块总会执行，无论请求成功还是失败。
-        // 这是设置 loading 状态为 false 的最佳位置。
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-
-    // 只有当 key 存在时才执行数据获取
-    if (key) {
-      fetchData();
-    }
   }, [key]);
 
-  // 3. 基于不同的状态进行条件渲染，为用户提供清晰的反馈。
-  // 如果正在加载，显示加载提示
+  const isAdminView =
+    productData &&
+    Object.prototype.hasOwnProperty.call(productData, "original_price");
+
   if (loading) {
-    return <div style={{ textAlign: 'center', marginTop: '50px' }}><Spin size="large" tip="正在加载..." /></div>;
+    return (
+      <>
+        <Navbar />
+        <main className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
+          <Skeleton className="mb-6 h-9 w-28" />
+          <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <div className="flex flex-col gap-6 p-6 sm:flex-row sm:gap-10 sm:p-8">
+              <Skeleton className="aspect-square w-full max-w-[320px] rounded-xl mx-auto sm:mx-0" />
+              <div className="flex-1 space-y-4">
+                <Skeleton className="h-8 w-3/4 max-w-md" />
+                <Skeleton className="h-10 w-40" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            </div>
+          </div>
+        </main>
+      </>
+    );
   }
 
-  // 如果有错误，显示错误信息
   if (error) {
-    return <div style={{ padding: '20px' }}><Alert message="错误" description={error} type="error" showIcon /></div>;
+    return (
+      <>
+        <Navbar />
+        <main className="mx-auto max-w-lg px-4 py-10">
+          <PageBackButton fallback="/" className="mb-6" />
+          <Alert variant="destructive">
+            <AlertTitle>加载失败</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </main>
+      </>
+    );
   }
 
-  // 如果数据为空（例如，API 返回空），或者后端返回了特定的消息，显示找不到商品的提示
-  if (!productData || productData.message === '没有找到对应的商品.') {
-    return <div style={{ padding: '20px' }}><Alert message="未找到商品" description="找不到该商品信息。" type="warning" showIcon /></div>;
+  if (!productData || productData.message === "没有找到对应的商品.") {
+    return (
+      <>
+        <Navbar />
+        <main className="mx-auto max-w-lg px-4 py-10">
+          <PageBackButton fallback="/" className="mb-6" />
+          <Alert>
+            <Package className="h-4 w-4" />
+            <AlertTitle>未找到商品</AlertTitle>
+            <AlertDescription>该商品不存在或已下架。</AlertDescription>
+          </Alert>
+          <Button className="mt-6" variant="outline" onClick={() => navigate("/")}>
+            去首页逛逛
+          </Button>
+        </main>
+      </>
+    );
   }
 
-  // 测试 Map 遍历出每一个分类
-  // productData.categories.map((category, index) => {
-  //   console.log(category.name)
-  // })
+  const description = productData.description || "";
+  const descPreview =
+    description.length > 160 && !descExpanded
+      ? `${description.slice(0, 160)}…`
+      : description;
 
-  // 4. 如果所有条件都通过，渲染完整的商品数据
   return (
-    <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
-      {/* 返回上一页按钮，使用 navigate(-1) 实现 */}
-      <Button
-        type="primary"
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate(-1)}
-        style={{ marginBottom: '20px' }}
-      >
-        返回上一页
-      </Button>
+    <>
+      <Navbar />
+      <main className="min-h-[calc(100vh-8rem)] bg-gradient-to-b from-muted/40 via-background to-background">
+        <div className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <PageBackButton fallback="/" />
+          </div>
 
-      <Divider>商品详细</Divider>
+          <Card className="overflow-hidden border-border/60 shadow-lg">
+            <CardContent className="p-0">
+              <div className="flex flex-col lg:flex-row lg:items-stretch">
+                <div className="flex justify-center bg-muted/30 p-4 sm:p-6 lg:w-[min(100%,400px)] lg:shrink-0 lg:items-center">
+                  <div className="relative aspect-square w-full max-w-[min(100%,360px)] overflow-hidden rounded-2xl border bg-background shadow-sm lg:max-w-none lg:rounded-xl">
+                    <img
+                      width={640}
+                      height={640}
+                      alt={productData.title}
+                      src={mediaImageUrl(productData.image_url)}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                </div>
 
-      <Card
-        hoverable
-        // 确保你的 Product.css 文件中定义了 .product-card 类
-        className="product-card"
-        style={{ boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}
-      >
-        <Flex justify="center" align="center" gap={32}>
-          <Image
-            width={350}
-            alt={productData.title}
-            src={`http://localhost:3000/media/images/${productData.image_url}`}
-            style={{ borderRadius: 8 }}
-          />
-          <List
-            header={<Title level={3} style={{ margin: 0 }}>{productData.title}</Title>}
-            style={{ width: '100%' }}
-          >
-            {/* 1. 使用三元表达式判断字段是否存在，并美化价格样式 */}
-            {productData.is_on_promotion ? (
-              <List.Item>
-                <Text delete style={{ fontSize: 14, color: '#c43c1aff' }}>{productData.price}¥</Text>
-                <List.Item.Meta
-                  title="价格（促销中！）"
-                  description={<Text strong style={{ fontSize: 20, color: '#52c41a' }}>{productData.promotion_price}¥</Text>}
-                />
-              </List.Item>
-            ) : (
-              <List.Item>
-                <List.Item.Meta
-                  title="价格"
-                  description={<Text strong style={{ fontSize: 20, color: '#52c41a' }}>{productData.price}¥</Text>}
-                />
-              </List.Item>
-            )}
+                <div className="flex min-w-0 flex-1 flex-col gap-5 p-6 sm:p-8">
+                  <div>
+                    <h1 className="text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
+                      {productData.title}
+                    </h1>
+                    {productData.categories?.length ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {productData.categories.map((category, index) => (
+                          <Badge
+                            key={category.id ?? category.name ?? index}
+                            variant="secondary"
+                            className="font-normal"
+                          >
+                            {category.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
 
-            {productData.original_price ? (
-              <List.Item>
-                <List.Item.Meta title="进货价格" description={`${productData.original_price}¥`} />
-              </List.Item>
-            ) : null}
+                  <Separator />
 
-            {productData.discount_amount ? (
-              <List.Item>
-                <List.Item.Meta title="折扣金额" description={`${productData.discount_amount}¥`} />
-              </List.Item>
-            ) : null}
+                  <div className="flex flex-wrap items-end gap-4">
+                    {productData.is_on_promotion ? (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          促销价
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-baseline gap-2">
+                          <span className="text-lg text-muted-foreground line-through">
+                            ¥{productData.price}
+                          </span>
+                          <span className="text-3xl font-bold text-green-600 tabular-nums dark:text-green-400">
+                            ¥{productData.promotion_price}
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          售价
+                        </p>
+                        <p className="mt-1 text-3xl font-bold text-green-600 tabular-nums dark:text-green-400">
+                          ¥{productData.price}
+                        </p>
+                      </div>
+                    )}
+                    {productData.stock != null && (
+                      <Badge
+                        variant="outline"
+                        className="mb-1 ml-auto sm:ml-0 text-muted-foreground"
+                      >
+                        库存 {productData.stock}
+                      </Badge>
+                    )}
+                  </div>
 
-            {productData.stock ? (
-              <List.Item>
-                <List.Item.Meta title="库存" description={`${productData.stock}`} />
-              </List.Item>
-            ) : null}
+                  {productData.discount_amount != null &&
+                    productData.discount_amount !== "" &&
+                    productData.is_on_promotion && (
+                      <p className="text-sm text-muted-foreground">
+                        含立减 ¥{productData.discount_amount}
+                      </p>
+                    )}
 
-            {productData.description ? (
-              <List.Item>
-                <List.Item.Meta
-                  title="描述"
-                  description={<Paragraph ellipsis={{ rows: 3, expandable: true, symbol: '更多' }}>{productData.description}</Paragraph>}
-                />
-              </List.Item>
-            ) : null}
+                  {productData.barcode ? (
+                    <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                      <p className="text-xs text-muted-foreground">条形码</p>
+                      <p className="font-mono text-sm tracking-wide break-all">
+                        {productData.barcode}
+                      </p>
+                    </div>
+                  ) : null}
 
-            {/* {productData.categories.map} */}
-            
-            {productData.categories ? (
-              <List.Item>
-                <List.Item.Meta
-                  title="分类"
-                  description={
-                    productData.categories.map((category, index) => (
-                      <Tag color="blue" key={category.name || index}>
-                        {category.name}
-                      </Tag>
-                    ))
-                  }
-                />
-              </List.Item>
-            ) : null }
+                  {isAdminView && productData.original_price != null && (
+                    <div className="rounded-lg border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+                      <p className="text-xs font-medium text-amber-800 dark:text-amber-200/90">
+                        管理员可见
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        进货价 <span className="font-medium text-foreground">¥{productData.original_price}</span>
+                      </p>
+                    </div>
+                  )}
 
-            {productData.created_at ? (
-              <List.Item>
-                <List.Item.Meta title="创建时间" description={new Date(productData.created_at).toLocaleString()} />
-              </List.Item>
-            ) : null}
-            
-            {productData.updated_at ? (
-              <List.Item>
-                <List.Item.Meta title="更新时间" description={new Date(productData.updated_at).toLocaleString()} />
-              </List.Item>
-            ) : null}
-          </List>
-        </Flex>
-      </Card>
-    </div>
+                  {description ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        商品描述
+                      </p>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+                        {descPreview}
+                      </p>
+                      {description.length > 160 && (
+                        <button
+                          type="button"
+                          className="text-sm font-medium text-primary hover:underline"
+                          onClick={() => setDescExpanded((e) => !e)}
+                        >
+                          {descExpanded ? "收起" : "展开全文"}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {isAdminView && (productData.created_at || productData.updated_at) ? (
+                    <div className="mt-auto space-y-1 border-t pt-4 text-xs text-muted-foreground">
+                      {productData.created_at ? (
+                        <p>创建：{new Date(productData.created_at).toLocaleString()}</p>
+                      ) : null}
+                      {productData.updated_at ? (
+                        <p>更新：{new Date(productData.updated_at).toLocaleString()}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </>
   );
 }
 

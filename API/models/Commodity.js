@@ -39,6 +39,11 @@ const Commodity = sequelize.define('Commodity', {
     image_url: {
         type: DataTypes.STRING(255)
     },
+    barcode: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+        unique: true
+    },
     created_at: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW

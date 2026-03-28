@@ -5,6 +5,21 @@ const { checkLogin } = require('../middleware/verify');      // 验证是否登�
 
 const db = require('../models');
 const { Commodity, Category } = db;
+const log = require('../lib/logger').createLogger('index');
+
+// 公开分类列表（导航、表单）
+router.get('/categories', async (req, res) => {
+    try {
+        const rows = await Category.findAll({
+            attributes: ['id', 'name'],
+            order: [['id', 'ASC']],
+        });
+        res.json(rows);
+    } catch (error) {
+        log.error('获取分类列表失败', error.message);
+        res.status(500).json({ message: '服务器内部错误.' });
+    }
+});
 
 // 已经全局使用中间件来判断是否登入，role为true则是管理员
 // 我们据此决定检索数据库后返回的数据字段是怎么样的，如果是管理员，就返回商品更加详细的数据，如进货价
@@ -117,7 +132,35 @@ router.get('/', checkLogin, async(req, res) => {
             return res.status(200).json(products);
         }
     } catch(error) {
-        console.error('获取商品列表失败：', error);
+        log.error('获取商品列表失败', error.message);
+        res.status(500).json({ message: '服务器内部错误.' });
+    }
+});
+
+// GET 按条形码查找商品 id（首页等快速打开详情；需数据库已存在 barcode 列）
+router.get('/products/by-barcode', checkLogin, async (req, res) => {
+    try {
+        const raw = req.query.code;
+        const code = typeof raw === 'string' ? raw.trim().slice(0, 64) : '';
+        if (!code) {
+            return res.status(400).json({ message: '请提供查询参数 code（条形码）' });
+        }
+
+        const item = await Commodity.findOne({
+            where: { barcode: code },
+            attributes: ['id', 'title']
+        });
+
+        if (!item) {
+            return res.status(404).json({ message: '未找到该条形码对应的商品' });
+        }
+
+        return res.status(200).json({
+            id: item.id,
+            title: item.title
+        });
+    } catch (error) {
+        log.error('按条形码查询商品失败', error.message);
         res.status(500).json({ message: '服务器内部错误.' });
     }
 });
@@ -139,7 +182,8 @@ router.get('/products/:id', checkLogin, async(req, res) => {
                     'is_on_promotion',
                     'discount_amount',
                     'stock',
-                    'image_url'
+                    'image_url',
+                    'barcode'
                 ],
                 include: [{
                     model: Category,
@@ -171,7 +215,7 @@ router.get('/products/:id', checkLogin, async(req, res) => {
             };
         }
     } catch(error) {
-        console.log('获取具体商品信息失败：', error);
+        log.error('获取具体商品信息失败', error.message);
         res.status(500).json({ message: '服务器内部错误.' });
     }
 });

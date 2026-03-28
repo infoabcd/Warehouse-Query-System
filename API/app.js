@@ -9,6 +9,8 @@ const mediaRoute = require('./routes/media');
 const adminRoute = require('./routes/admin');
 
 const { checkLogin } = require('./middleware/verify');  // 解构导入，因为 middleware/verify 有两个方法，结构后导出了。
+const { createLogger } = require('./lib/logger');
+const appLog = createLogger('app');
 
 // 通用导入
 const app = express();
@@ -27,7 +29,8 @@ const PORT = 3000;
 // 否则浏览器是不会接管 Token 的，会认为是跨域。不要以 / 结尾
 app.use(
     cors({
-        origin: 'http://localhost:5173',
+        // origin: 'http://localhost:5173',
+        origin: 'http://localhost:5174',
         credentials: true,
         // 后端：“我允许来自这个特定域的请求携带凭证。”
         // 对应前端 fetch 的 credentials: 'include'
@@ -57,5 +60,5 @@ app.use('/media', mediaRoute);
 app.use('/admin', adminRoute);
 
 app.listen(PORT, () => {
-    console.log(`服务已经启动到 http://localhost:${PORT}`);
+    appLog.info(`服务已启动 http://localhost:${PORT}`);
 });

@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import './App.css';
-
 import Home from './pages/Home';
 import Search from './pages/Search';
 import Product from './pages/Products';
@@ -11,6 +9,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/DashBoard';
 import AddProduct from './pages/AddProduct';
 import EditProduct from './pages/EditProduct';
+import DashboardCategories from './pages/DashboardCategories';
 
 function App() {
 
@@ -27,6 +26,7 @@ function App() {
             <Route path='/dashboard' element={<Dashboard />}/>
             <Route path='/dashboard/add-product' element={<AddProduct />}/>
             <Route path='/dashboard/edit-product/:id' element={<EditProduct />}/>
+            <Route path='/dashboard/categories' element={<DashboardCategories />}/>
             <Route path='/*' element={<NotFound />}/>
           </Routes>
         </div>

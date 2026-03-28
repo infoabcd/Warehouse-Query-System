@@ -1,260 +1,466 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Form, Input, InputNumber, Button, message, Typography, Switch, Upload, Space, Select } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { useState, useRef, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  Upload,
+  ArrowLeft,
+  ScanBarcode,
+  Package,
+  ImageIcon,
+  Tag,
+  Camera,
+} from "lucide-react";
+import { BarcodeCameraDialog } from "@/components/BarcodeCameraDialog";
+import { BarcodeFieldHelp } from "@/components/BarcodeFieldHelp";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { API_BASE, mediaImageUrl, fetchPublicCategories } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-const { Title } = Typography;
-const { Dragger } = Upload;
-const { Option } = Select;
+function SectionLabel({ icon: Icon, children }) {
+  return (
+    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+      {children}
+    </div>
+  );
+}
 
-const AddProduct = () => {
-  const [form] = Form.useForm();
+function AddProduct() {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+  const barcodeInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
-
   const [imageLoading, setImageLoading] = useState(false);
   const [imageFileName, setImageFileName] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
 
-  const [messageApi, contextHolder] = message.useMessage();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [price, setPrice] = useState("");
+  const [originalPrice, setOriginalPrice] = useState("");
+  const [stock, setStock] = useState("");
+  const [isPromo, setIsPromo] = useState(false);
+  const [promotionPrice, setPromotionPrice] = useState("");
+  const [categoryIds, setCategoryIds] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
-    // 硬编码的分类数据 - 对应数据库
-  const categories = [
-    { id: 1, name: '碗筷' },
-    { id: 2, name: '厨房用具' },
-    { id: 3, name: '日常用具' },
-    { id: 4, name: '胶制品' },
-    { id: 5, name: '铁制品' },
-    { id: 6, name: '农业工具' },
-    { id: 7, name: '特价商品' },
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await fetchPublicCategories();
+      if (!cancelled) setCategoryOptions(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-
-  ///////////////////////////////
-  //  处理自定义图片上传逻辑      //
-  //  包含文件和上传进度回调      //
-  //////////////////////////////
-  const handleImageUpload = async (options) => {
-    const { file, onSuccess, onError } = options;
+  const uploadFile = async (file) => {
+    if (!file || !file.type.startsWith("image/")) {
+      toast.error("请选择图片文件");
+      return;
+    }
     const formData = new FormData();
-    formData.append('image', file);
+    formData.append("image", file);
     setImageLoading(true);
-
     try {
-      const response = await fetch('http://localhost:3000/media/upload', {
-        method: 'POST',
+      const response = await fetch(`${API_BASE}/media/upload`, {
+        method: "POST",
         body: formData,
-        credentials: 'include',
+        credentials: "include",
       });
-
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`图片上传失败: ${response.status} ${response.statusText}. 详情: ${errorText}`);
+        const t = await response.text();
+        throw new Error(t);
       }
-
       const data = await response.json();
-      messageApi.success('图片上传成功！');
-      setImageFileName(data.fileName);                                      // 保存文件名到变量
-      setImageUrl(`http://localhost:3000/media/images/${data.fileName}`);   // 保存图片URL到变量
-      onSuccess(data);
-    } catch (error) {
-        messageApi.error('图片上传失败，请检查控制台。');
-        onError(error);
-        console.error('图片上传出错:', error);
+      toast.success("图片上传成功");
+      setImageFileName(data.fileName);
+      setImageUrl(mediaImageUrl(data.fileName));
+    } catch (e) {
+      toast.error("图片上传失败");
+      console.error(e);
     } finally {
-        setImageLoading(false);
+      setImageLoading(false);
     }
   };
 
-  //////////////////////
-  //    处理表单提交    //
-  //    表单字段值     //
-  /////////////////////
-  const onFinish = async (values) => {
-    if (!imageFileName) {
-      messageApi.error('请先上传商品图片！');
+  const toggleCategory = (id) => {
+    setCategoryIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      toast.error("请输入商品名称");
       return;
     }
-    
+    if (!imageFileName) {
+      toast.error("请先上传商品图片");
+      return;
+    }
+    if (!categoryIds.length) {
+      toast.error("请选择至少一个分类");
+      return;
+    }
+    const p = Number(price);
+    const op = Number(originalPrice);
+    const st = parseInt(String(stock).trim(), 10);
+    if (Number.isNaN(p) || p < 0) {
+      toast.error("请输入有效的售卖价格");
+      return;
+    }
+    if (Number.isNaN(op) || op < 0) {
+      toast.error("请输入有效的进货价格");
+      return;
+    }
+    if (Number.isNaN(st) || st < 0) {
+      toast.error("请输入有效的库存（非负整数）");
+      return;
+    }
+    let promo = null;
+    if (isPromo) {
+      const pp = Number(promotionPrice);
+      if (Number.isNaN(pp) || pp < 0) {
+        toast.error("请输入有效的促销价格");
+        return;
+      }
+      promo = pp;
+    }
+
+    const barcodeTrim = barcode.trim();
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || null,
+      price: p,
+      original_price: op,
+      stock: st,
+      is_on_promotion: isPromo,
+      promotion_price: promo,
+      categories: categoryIds,
+      imagePath: imageFileName,
+      barcode: barcodeTrim || null,
+    };
+
     setLoading(true);
     try {
-      const payload = {
-        // 展开表达式
-        ...values,
-        imagePath: imageFileName,     // 使用上传后返回的文件名
-        is_on_promotion: values.is_on_promotion || false,
-        // 如果没有勾选促销，则将促销价格设为null
-        promotion_price: values.is_on_promotion ? values.promotion_price : null,
-      };
-
-      // 开始创建新商品 - Post到admin/Create后端路由
-      const response = await fetch('http://localhost:3000/admin/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch(`${API_BASE}/admin/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        credentials: 'include',
+        credentials: "include",
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`创建商品失败: ${response.status} ${response.statusText}. 详情: ${errorText}`);
+      const text = await response.text();
+      let body = {};
+      try {
+        body = text ? JSON.parse(text) : {};
+      } catch {
+        body = { message: text };
       }
 
-      messageApi.success('商品创建成功！');
-      navigate('/dashboard'); // 导航回仪表盘
-    } catch (error) {
-        messageApi.error('创建商品失败，请检查控制台。');
-        console.error('创建商品出错:', error);
+      if (!response.ok) {
+        if (response.status === 409) {
+          toast.error(body.message || "条形码已被使用");
+          return;
+        }
+        throw new Error(body.message || text || "创建失败");
+      }
+      toast.success("商品创建成功");
+      navigate("/dashboard");
+    } catch (err) {
+      toast.error(err.message || "创建商品失败");
+      console.error(err);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <>
-      {contextHolder}
-      <div className="add-product-container p-6 bg-gray-100 min-h-screen flex justify-center items-center">
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl">
-          <Title level={2} className="text-center mb-6">新增商品</Title>
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={onFinish}
-            initialValues={{ is_on_promotion: false }}
-          >
-            <Form.Item
-              name="title"
-              label="商品名称"
-              rules={[{ required: true, message: '请输入商品名称！' }]}
-            >
-              <Input placeholder="商品名称" />
-            </Form.Item>
-
-            <Form.Item
-              name="description"
-              label="商品描述"
-            >
-              <Input.TextArea rows={4} placeholder="商品详细描述" />
-            </Form.Item>
-
-            <Form.Item
-              name="price"
-              label="售卖价格 (¥)"
-              rules={[{ required: true, message: '请输入售卖价格！' }]}
-            >
-              <InputNumber style={{ width: '100%' }} min={0} placeholder="0.00" />
-            </Form.Item>
-
-            <Form.Item
-              name="original_price"
-              label="进货价格 (¥)"
-              rules={[{ required: true, message: '请输入进货价格！' }]}
-            >
-              <InputNumber style={{ width: '100%' }} min={0} placeholder="0.00" />
-            </Form.Item>
-
-            <Form.Item
-              name="is_on_promotion"
-              label="是否促销"
-              valuePropName="checked"
-            >
-              <Switch />
-            </Form.Item>
-            
-            {/* 使用Form.Item的dependencies来触发条件渲染 */}
-            <Form.Item
-              noStyle
-              shouldUpdate={(prevValues, currentValues) => prevValues.is_on_promotion !== currentValues.is_on_promotion}
-            >
-              {({ getFieldValue }) =>
-                getFieldValue('is_on_promotion') ? (
-                  <Form.Item
-                    name="promotion_price"
-                    label="促销价格 (¥)"
-                    rules={[{ required: true, message: '请输入促销价格！' }]}
-                  >
-                    <InputNumber style={{ width: '100%' }} min={0} placeholder="0.00" />
-                  </Form.Item>
-                ) : null
-              }
-            </Form.Item>
-
-            <Form.Item
-              name="stock"
-              label="库存"
-              rules={[{ required: true, message: '请输入库存量！' }]}
-            >
-              <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
-            </Form.Item>
-
-            <Form.Item
-              name="categories"
-              label="商品分类"
-              rules={[{ required: true, message: '请选择商品分类！' }]}
-            >
-              <Select
-                mode="multiple"
-                allowClear
-                style={{ width: '100%' }}
-                placeholder="请选择分类"
-              >
-                {categories.map(cat => (
-                  <Option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-
-            <Form.Item
-              label="商品图片"
-              rules={[{ required: true, message: '请上传商品图片！' }]}
-            >
-              <Dragger
-                name="image"
-                multiple={false}
-                listType="picture-card"
-                className="add-product-dragger"
-                showUploadList={false}
-                customRequest={handleImageUpload}
-              >
-                {imageUrl ? (
-                  <img src={imageUrl} alt="商品图片预览" style={{ width: '100%' }} />
-                ) : (
-                  <div>
-                    <p className="ant-upload-drag-icon">
-                      <PlusOutlined />
-                    </p>
-                    <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-                  </div>
-                )}
-              </Dragger>
-            </Form.Item>
-
-            <Form.Item>
-              <Space>
-                <Button 
-                  type="primary" 
-                  htmlType="submit" 
-                  loading={loading || imageLoading}
-                >
-                  创建商品
-                </Button>
-                {/* 取消就返回到仪表盘 */}
-                <Button 
-                  onClick={() => navigate('/dashboard')}
-                >
-                  取消
-                </Button>
-              </Space>
-            </Form.Item>
-          </Form>
+    <div className="min-h-screen bg-gradient-to-b from-muted/60 via-background to-background">
+      <div className="mx-auto max-w-5xl px-4 py-8 lg:py-12">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <Button variant="ghost" size="sm" className="gap-2 -ml-2" asChild>
+            <Link to="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+              返回仪表盘
+            </Link>
+          </Button>
         </div>
+
+        <Card className="border-border/60 shadow-xl overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 pb-6 space-y-1">
+            <CardTitle className="text-2xl">新增商品</CardTitle>
+            <CardDescription>
+              填写基本信息与价格；条形码可选，便于之后在仪表盘「扫码入库」。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <form onSubmit={handleSubmit} className="lg:grid lg:grid-cols-[1fr_340px]">
+              <div className="space-y-8 p-6 lg:p-8 lg:border-r">
+                <div className="space-y-4">
+                  <SectionLabel icon={Package}>基本信息</SectionLabel>
+                  <div className="space-y-2">
+                    <Label htmlFor="title">商品名称</Label>
+                    <Input
+                      id="title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="例如：不锈钢炒锅"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">商品描述</Label>
+                    <Textarea
+                      id="description"
+                      rows={4}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="规格、材质、使用说明等"
+                      className="resize-y min-h-[100px]"
+                    />
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <SectionLabel icon={ScanBarcode}>条形码</SectionLabel>
+                  <BarcodeFieldHelp />
+                  <div className="space-y-2">
+                    <Label htmlFor="barcode">商品条码（可选）</Label>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                      <Input
+                        ref={barcodeInputRef}
+                        id="barcode"
+                        inputMode="text"
+                        autoComplete="off"
+                        value={barcode}
+                        onChange={(e) => setBarcode(e.target.value)}
+                        placeholder="手动输入、粘贴，或先点此框再用扫码枪"
+                        className="font-mono text-base tracking-wide sm:flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="shrink-0 gap-2 sm:w-auto"
+                        onClick={() => setCameraOpen(true)}
+                      >
+                        <Camera className="h-4 w-4" />
+                        相机扫码
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <SectionLabel>价格与库存</SectionLabel>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="price">售卖价格 (¥)</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="original_price">进货价格 (¥)</Label>
+                      <Input
+                        id="original_price"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={originalPrice}
+                        onChange={(e) => setOriginalPrice(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border bg-card/50 px-4 py-3">
+                    <Label htmlFor="promo" className="cursor-pointer">
+                      是否促销
+                    </Label>
+                    <Switch
+                      id="promo"
+                      checked={isPromo}
+                      onCheckedChange={setIsPromo}
+                    />
+                  </div>
+                  {isPromo && (
+                    <div className="space-y-2">
+                      <Label htmlFor="promotion_price">促销价格 (¥)</Label>
+                      <Input
+                        id="promotion_price"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={promotionPrice}
+                        onChange={(e) => setPromotionPrice(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-2 max-w-xs">
+                    <Label htmlFor="stock">库存</Label>
+                    <Input
+                      id="stock"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={stock}
+                      onChange={(e) => setStock(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <Separator className="lg:hidden" />
+
+                <div className="space-y-4 lg:hidden">
+                  <SectionLabel icon={Tag}>分类</SectionLabel>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border p-3 sm:grid-cols-3">
+                    {categoryOptions.map((cat) => (
+                      <label
+                        key={cat.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={categoryIds.includes(cat.id)}
+                          onCheckedChange={() => toggleCategory(cat.id)}
+                        />
+                        {cat.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button type="submit" disabled={loading || imageLoading}>
+                    {loading ? "提交中…" : "创建商品"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/dashboard")}
+                  >
+                    取消
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-6 bg-muted/20 p-6 lg:p-8">
+                <div className="space-y-4">
+                  <SectionLabel icon={ImageIcon}>商品图片</SectionLabel>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ")
+                        fileInputRef.current?.click();
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files?.[0];
+                      if (f) uploadFile(f);
+                    }}
+                    className={cn(
+                      "flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/20 bg-background/80 p-6 text-center text-sm text-muted-foreground transition-colors hover:border-primary/30 hover:bg-background",
+                      imageLoading && "pointer-events-none opacity-60"
+                    )}
+                  >
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt="预览"
+                        className="max-h-52 w-full rounded-md object-contain"
+                      />
+                    ) : (
+                      <>
+                        <Upload className="mb-3 h-10 w-10 opacity-40" />
+                        <p className="font-medium text-foreground">点击或拖拽上传</p>
+                        <p className="mt-1 text-xs">支持 JPG、PNG、WebP 等</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="hidden lg:block space-y-4">
+                  <SectionLabel icon={Tag}>分类（可多选）</SectionLabel>
+                  <div className="grid grid-cols-1 gap-2 rounded-lg border bg-background p-3">
+                    {categoryOptions.map((cat) => (
+                      <label
+                        key={cat.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-2 py-1.5 hover:bg-muted/80"
+                      >
+                        <Checkbox
+                          checked={categoryIds.includes(cat.id)}
+                          onCheckedChange={() => toggleCategory(cat.id)}
+                        />
+                        {cat.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={() => barcodeInputRef.current?.focus()}
+                >
+                  <ScanBarcode className="h-4 w-4" />
+                  聚焦条码框（准备扫码）
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
-    </>
+      <BarcodeCameraDialog
+        open={cameraOpen}
+        onOpenChange={setCameraOpen}
+        onDecoded={(t) => setBarcode(t)}
+      />
+    </div>
   );
-};
+}
 
 export default AddProduct;
